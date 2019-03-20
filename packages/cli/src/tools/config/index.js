@@ -112,6 +112,7 @@ function getDefaultConfig(config: ProjectConfig, root: string) {
       {
         ios: null,
         android: null,
+        root: folder,
       },
     );
     return deps;
