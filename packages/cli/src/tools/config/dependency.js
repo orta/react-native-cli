@@ -64,6 +64,11 @@ export function android(
   return {packageImportPath, packageInstance};
 }
 
+/**
+ * This adds back the extname that was stripped by `findPodspecName`,
+ * because `findPodspecName` for now needs to remain backwards compatible
+ * for the `link` command.
+ */
 export function ios(
   folder: string,
   userConfig: InputDependencyConfigIOS,
@@ -76,5 +81,5 @@ export function ios(
     return null;
   }
 
-  return {podspec};
+  return {podspec: `${podspec}.podspec`};
 }
