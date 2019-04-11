@@ -7,16 +7,13 @@
  * @flow
  */
 
-import {flatten, isEmpty, difference} from 'lodash';
-import type {ContextT} from '../../tools/types.flow';
-import logger from '../../tools/logger';
-import getProjectConfig from './getProjectConfig';
-import getDependencyConfig from './getDependencyConfig';
-import getProjectDependencies from './getProjectDependencies';
+import {flatMap, values, difference} from 'lodash';
+import type {ConfigT} from '../../tools/config/types.flow';
+import {logger, CLIError} from '@react-native-community/cli-tools';
 import promiseWaterfall from './promiseWaterfall';
 import commandStub from './commandStub';
 import promisify from './promisify';
-import getPlatforms, {getPlatformName} from '../../tools/getPlatforms';
+import getPlatformName from './getPlatformName';
 
 const unlinkDependency = (
   platforms,
@@ -26,7 +23,9 @@ const unlinkDependency = (
   otherDependencies,
 ) => {
   Object.keys(platforms || {}).forEach(platform => {
-    if (!project[platform] || !dependency.config[platform]) {
+    const projectConfig = project[platform];
+    const dependencyConfig = dependency.platforms[platform];
+    if (!projectConfig || !dependencyConfig) {
       return;
     }
 
@@ -40,9 +39,9 @@ const unlinkDependency = (
     }
 
     const isInstalled = linkConfig.isInstalled(
-      project[platform],
+      projectConfig,
       packageName,
-      dependency.config[platform],
+      dependencyConfig,
     );
 
     if (!isInstalled) {
@@ -58,10 +57,8 @@ const unlinkDependency = (
 
     linkConfig.unregister(
       packageName,
-      // $FlowFixMe: We check for existence on line 38
-      dependency.config[platform],
-      // $FlowFixMe: We check for existence on line 38
-      project[platform],
+      dependencyConfig,
+      projectConfig,
       otherDependencies,
     );
 
@@ -79,79 +76,58 @@ const unlinkDependency = (
  * If optional argument [packageName] is provided, it's the only one
  * that's checked
  */
-function unlink(args: Array<string>, ctx: ContextT) {
+function unlink(args: Array<string>, ctx: ConfigT) {
   const packageName = args[0];
 
-  let platforms;
+  const {[packageName]: dependency, ...otherDependencies} = ctx.dependencies;
 
-  try {
-    platforms = getPlatforms(ctx.root);
-  } catch (err) {
-    logger.error(
-      "No package.json found. Are you sure it's a React Native project?",
-    );
-    return Promise.reject(err);
+  if (!dependency) {
+    throw new CLIError(`
+      Failed to unlink "${packageName}". It appears that the project is not linked yet.
+    `);
   }
 
-  const allDependencies = getProjectDependencies(ctx.root).map(dependency =>
-    getDependencyConfig(ctx, platforms, dependency),
-  );
-  let otherDependencies;
-  let dependency;
-
-  try {
-    const idx = allDependencies.findIndex(p => p.name === packageName);
-
-    if (idx === -1) {
-      throw new Error(`Project "${packageName}" is not a react-native library`);
-    }
-
-    otherDependencies = [...allDependencies];
-    dependency = otherDependencies.splice(idx, 1)[0];
-  } catch (err) {
-    return Promise.reject(err);
-  }
-
-  const project = getProjectConfig(ctx, platforms);
+  const dependencies = values(otherDependencies);
 
   const tasks = [
-    () => promisify(dependency.commands.preunlink || commandStub),
+    () => promisify(dependency.hooks.preulink || commandStub),
     () =>
       unlinkDependency(
-        platforms,
-        project,
+        ctx.platforms,
+        ctx.project,
         dependency,
         packageName,
-        otherDependencies,
+        dependencies,
       ),
-    () => promisify(dependency.commands.postunlink || commandStub),
+    () => promisify(dependency.hooks.postunlink || commandStub),
   ];
 
   return promiseWaterfall(tasks)
     .then(() => {
-      // @todo move all these to `tasks` array, just like in
-      // link
+      // @todo move all these to `tasks` array
+      // @todo it is possible we could be unlinking some project assets in case of duplicate
       const assets = difference(
         dependency.assets,
-        flatten(allDependencies, d => d.assets),
+        flatMap(dependencies, d => d.assets),
       );
 
-      if (isEmpty(assets)) {
+      if (assets.length === 0) {
         return;
       }
 
-      Object.keys(platforms || {}).forEach(platform => {
+      Object.keys(ctx.platforms || {}).forEach(platform => {
+        const projectConfig = ctx.project[platform];
         const linkConfig =
-          platforms[platform] &&
-          platforms[platform].linkConfig &&
-          platforms[platform].linkConfig();
-        if (!linkConfig || !linkConfig.unlinkAssets || !project[platform]) {
+          ctx.platforms[platform] &&
+          ctx.platforms[platform].linkConfig &&
+          ctx.platforms[platform].linkConfig();
+        if (!linkConfig || !linkConfig.unlinkAssets || !projectConfig) {
           return;
         }
 
         logger.info(`Unlinking assets from ${platform} project`);
-        // $FlowFixMe: We check for platorm existence on line 150
-        linkConfig.unlinkAssets(assets, project[platform]);
+
+        linkConfig.unlinkAssets(assets, projectConfig);
       });
 
       logger.info(
@@ -159,10 +135,10 @@ function unlink(args: Array<string>, ctx: ContextT) {
       );
     })
     .catch(err => {
-      logger.error(
-        `It seems something went wrong while unlinking. Error:\n${err.message}`,
+      throw new CLIError(
+        `Something went wrong while unlinking. Reason ${err.message}`,
+        err,
       );
-      throw err;
     });
 }
 

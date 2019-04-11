@@ -5,8 +5,7 @@
 import path from 'path';
 import {createBlacklist} from 'metro';
 import {loadConfig} from 'metro-config';
-import type {ContextT} from './types.flow';
-import findPlugins from './findPlugins';
+import {type ConfigT} from './config/types.flow';
 import findSymlinkedModules from './findSymlinkedModules';
 
 const resolveSymlinksForRoots = roots =>
@@ -31,18 +30,13 @@ const getBlacklistRE = () => createBlacklist([/.*\/__fixtures__\/.*/]);
  * @todo(grabbou): As a separate PR, haste.platforms should be added before "native".
  * Otherwise, a.native.js will not load on Windows or other platforms
  */
-export const getDefaultConfig = (ctx: ContextT) => {
-  const plugins = findPlugins(ctx.root);
-
+export const getDefaultConfig = (ctx: ConfigT) => {
   return {
     resolver: {
       resolverMainFields: ['react-native', 'browser', 'main'],
       blacklistRE: getBlacklistRE(),
-      platforms: ['ios', 'android', 'native', ...plugins.haste.platforms],
-      providesModuleNodeModules: [
-        'react-native',
-        ...plugins.haste.providesModuleNodeModules,
-      ],
+      platforms: [...ctx.haste.platforms, 'native'],
+      providesModuleNodeModules: ctx.haste.providesModuleNodeModules,
       hasteImplModulePath: path.join(ctx.reactNativePath, 'jest/hasteImpl'),
     },
     serializer: {
@@ -73,6 +67,7 @@ export const getDefaultConfig = (ctx: ContextT) => {
 export type ConfigOptionsT = {|
   maxWorkers?: number,
   port?: number,
+  projectRoot?: string,
   resetCache?: boolean,
   watchFolders?: string[],
   sourceExts?: string[],
@@ -85,20 +80,8 @@ export type ConfigOptionsT = {|
  *
  * This allows the CLI to always overwrite the file settings.
  */
-export default (async function load(
-  ctx: ContextT,
-  // $FlowFixMe - troubles with empty object being inexact
-  options?: ConfigOptionsT = {},
-) {
+export default function load(ctx: ConfigT, options?: ConfigOptionsT) {
   const defaultConfig = getDefaultConfig(ctx);
 
-  const config = await loadConfig(
-    {
-      cwd: ctx.root,
-      ...options,
-    },
-    defaultConfig,
-  );
-
-  return config;
-});
+  return loadConfig({cwd: ctx.root, ...options}, defaultConfig);
+}

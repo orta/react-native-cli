@@ -8,16 +8,14 @@
  */
 
 import Metro from 'metro';
-
 import {Terminal} from 'metro-core';
-
 import morgan from 'morgan';
 import path from 'path';
-import type {ContextT} from '../../tools/types.flow';
+import {logger} from '@react-native-community/cli-tools';
+import type {ConfigT} from '../../tools/config/types.flow';
 import messageSocket from './messageSocket';
 import webSocketProxy from './webSocketProxy';
 import MiddlewareManager from './middleware/MiddlewareManager';
-
 import loadMetroConfig from '../../tools/loadMetroConfig';
 
 export type Args = {|
@@ -40,7 +38,7 @@ export type Args = {|
   config?: string,
 |};
 
-async function runServer(argv: Array<string>, ctx: ContextT, args: Args) {
+async function runServer(argv: Array<string>, ctx: ConfigT, args: Args) {
   const terminal = new Terminal(process.stdout);
   const ReporterImpl = getReporterImpl(args.customLogReporterPath || null);
   const reporter = new ReporterImpl(terminal);
@@ -51,6 +49,7 @@ async function runServer(argv: Array<string>, ctx: ContextT, args: Args) {
     port: args.port,
     resetCache: args.resetCache,
     watchFolders: args.watchFolders,
+    projectRoot: ctx.root,
     sourceExts: args.sourceExts,
     reporter,
   });
@@ -61,7 +60,14 @@ async function runServer(argv: Array<string>, ctx: ContextT, args: Args) {
     watchFolders: metroConfig.watchFolders,
   });
 
-  middlewareManager.getConnectInstance().use(morgan('combined'));
+  middlewareManager.getConnectInstance().use(
+    morgan(
+      'combined',
+      !logger.isVerbose() && {
+        skip: (req, res) => res.statusCode < 400,
+      },
+    ),
+  );
 
   metroConfig.watchFolders.forEach(
     middlewareManager.serveStatic.bind(middlewareManager),

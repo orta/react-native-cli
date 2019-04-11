@@ -12,7 +12,7 @@ import path from 'path';
 import copyAndReplace from '../copyAndReplace';
 import promptInitializer from './promptSync';
 import walk from '../walk';
-import logger from '../logger';
+import {logger} from '@react-native-community/cli-tools';
 
 const prompt = promptInitializer();
 
@@ -127,6 +127,7 @@ function translateFilePath(filePath) {
     .replace('_gitignore', '.gitignore')
     .replace('_gitattributes', '.gitattributes')
     .replace('_babelrc', '.babelrc')
+    .replace('_eslintrc.js', '.eslintrc.js')
     .replace('_flowconfig', '.flowconfig')
     .replace('_buckconfig', '.buckconfig')
     .replace('_watchmanconfig', '.watchmanconfig');

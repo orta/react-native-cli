@@ -1,19 +1,11 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- * @format
+ * @flow
  */
-import loadConfig from '../../tools/config';
-
+import {type ConfigT} from '../../tools/config/types.flow';
 export default {
   name: 'config',
   description: 'Print CLI configuration',
-  func: async () => {
-    const config = await loadConfig();
-
-    console.log(JSON.stringify(config, null, 2));
+  func: async (argv: string[], ctx: ConfigT) => {
+    console.log(JSON.stringify(ctx, null, 2));
   },
 };
